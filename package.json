@@ -1,0 +1,24 @@
+{
+  "name": "@neutron-org/tge-client",
+  "version": "0.0.0-development",
+  "description": "Token Generation Event Client",
+  "main": "lib/index.js",
+  "author": "Sergey Ratiashvili <serg.s.r@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@cosmjs/amino": "^0.30.1",
+    "@cosmjs/cosmwasm-stargate": "^0.30.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "semantic-release": "semantic-release"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.4",
+    "semantic-release": "^21.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neutron-org/neutron-tge-ts-client.git"
+  }
+}
