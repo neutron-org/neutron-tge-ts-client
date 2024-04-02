@@ -133,7 +133,7 @@ export type ExecuteMsgWithManagers =
       };
     };
 
-export interface VestingInvestorsSchema {
+export interface VestingLpPclSchema {
   responses:
     | Uint128
     | Config
@@ -153,13 +153,13 @@ export interface VestingInvestorsSchema {
     | HistoricalExtensionArgs;
   execute:
     | ClaimArgs
-    | ReceiveArgs
     | RegisterVestingAccountsArgs
     | ProposeNewOwnerArgs
     | SetVestingTokenArgs
     | ManagedExtensionArgs1
     | WithManagersExtensionArgs1
-    | HistoricalExtensionArgs1;
+    | HistoricalExtensionArgs1
+    | ReceiveArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -324,18 +324,6 @@ export interface ClaimArgs {
    */
   recipient?: string | null;
 }
-/**
- * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
- */
-export interface ReceiveArgs {
-  description?: "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg";
-  type?: "object";
-  required?: ["amount", "msg", "sender"];
-  properties?: {
-    [k: string]: unknown;
-  };
-  additionalProperties?: never;
-}
 export interface RegisterVestingAccountsArgs {
   vesting_accounts: VestingAccount[];
 }
@@ -381,6 +369,18 @@ export interface ExecuteMsgHistorical {
   [k: string]: unknown;
 }
 /**
+ * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
+ */
+export interface ReceiveArgs {
+  description?: "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg";
+  type?: "object";
+  required?: ["amount", "msg", "sender"];
+  properties?: {
+    [k: string]: unknown;
+  };
+  additionalProperties?: never;
+}
+/**
  * This structure describes the parameters used for creating a contract.
  */
 export interface InstantiateMsg {
@@ -392,6 +392,12 @@ export interface InstantiateMsg {
    * Token info manager address
    */
   token_info_manager: string;
+  /**
+   * Initial list of whitelisted vesting managers
+   */
+  vesting_managers: string[];
+  vesting_token: AssetInfo;
+  xyk_vesting_lp_contract: string;
 }
 
 
@@ -471,10 +477,6 @@ export class Client {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
   }
-  receive = async(sender:string, args: ReceiveArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { receive: args }, fee || "auto", memo, funds);
-  }
   registerVestingAccounts = async(sender:string, args: RegisterVestingAccountsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { register_vesting_accounts: args }, fee || "auto", memo, funds);
@@ -506,5 +508,9 @@ export class Client {
   historicalExtension = async(sender:string, args: HistoricalExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { historical_extension: args }, fee || "auto", memo, funds);
+  }
+  receive = async(sender:string, args: ReceiveArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, { receive: args }, fee || "auto", memo, funds);
   }
 }

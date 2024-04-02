@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate"; 
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -26,11 +26,18 @@ export type Addr = string;
  */
 export type Uint128 = string;
 export type PoolType = "USDC" | "ATOM";
+export type CallbackArgs = {
+  finalize_pool_initialization: {
+    prev_lp_balance: PoolBalance;
+    [k: string]: unknown;
+  };
+};
 
 export interface NeutronAuctionSchema {
   responses: Config | State | UserInfoResponse;
   query: UserInfoArgs;
-  execute: UpdateConfigArgs | SetTokenInfoArgs | WithdrawArgs | LockLpArgs | WithdrawLpArgs;
+  execute: UpdateConfigArgs | SetTokenInfoArgs | WithdrawArgs | LockLpArgs | WithdrawLpArgs | CallbackArgs;
+  instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
 export interface Config {
@@ -236,6 +243,29 @@ export interface WithdrawLpArgs {
   duration: number;
   [k: string]: unknown;
 }
+export interface PoolBalance {
+  atom: Uint128;
+  usdc: Uint128;
+  [k: string]: unknown;
+}
+export interface InstantiateMsg {
+  deposit_window: number;
+  init_timestamp: number;
+  lockdrop_contract_address?: string | null;
+  lp_tokens_lock_window: number;
+  max_exchange_rate_age: number;
+  min_ntrn_amount: Uint128;
+  owner?: string | null;
+  price_feed_contract: string;
+  reserve_contract_address: string;
+  token_info_manager: string;
+  vesting_atom_contract_address: string;
+  vesting_lp_duration: number;
+  vesting_migration_pack_size: number;
+  vesting_usdc_contract_address: string;
+  withdrawal_window: number;
+  [k: string]: unknown;
+}
 
 
 function isSigningCosmWasmClient(
@@ -253,6 +283,35 @@ export class Client {
   }
   mustBeSigningClient() {
     return new Error("This client is not a SigningCosmWasmClient");
+  }
+  static async instantiate(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
+  static async instantiate2(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    salt: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
   }
   queryConfig = async(): Promise<Config> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
@@ -299,8 +358,8 @@ export class Client {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { migrate_to_vesting: {} }, fee || "auto", memo, funds);
   }
-  callback = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  callback = async(sender:string, args: CallbackArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { callback: {} }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, { callback: args }, fee || "auto", memo, funds);
   }
 }

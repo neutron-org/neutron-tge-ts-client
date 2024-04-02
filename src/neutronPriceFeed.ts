@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate"; 
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
 /**
  * A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
@@ -37,11 +37,12 @@ export type Uint128 = string;
  */
 export type Addr = string;
 export type String = string;
-export type PriceFeedRate = PriceFeedRate1[];
+export type ArrayOfPriceFeedRate = PriceFeedRate[];
 
 export interface NeutronPriceFeedSchema {
-  responses: Config | String | PriceFeedRate;
+  responses: Config | String | ArrayOfPriceFeedRate;
   execute: UpdateConfigArgs | UpdateOwnerArgs;
+  instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
 export interface Config {
@@ -62,7 +63,7 @@ export interface Coin {
   denom: string;
   [k: string]: unknown;
 }
-export interface PriceFeedRate1 {
+export interface PriceFeedRate {
   rate: Uint64;
   request_id: Uint64;
   resolve_time: Uint64;
@@ -85,6 +86,19 @@ export interface UpdateConfigMsg {
 export interface UpdateOwnerArgs {
   new_owner: string;
 }
+export interface InstantiateMsg {
+  ask_count: Uint64;
+  client_id: string;
+  execute_gas: Uint64;
+  fee_limit: Coin[];
+  max_update_interval?: number | null;
+  min_count: Uint64;
+  multiplier: Uint64;
+  oracle_script_id: Uint64;
+  owner?: string | null;
+  prepare_gas: Uint64;
+  symbols: string[];
+}
 
 
 function isSigningCosmWasmClient(
@@ -103,10 +117,39 @@ export class Client {
   mustBeSigningClient() {
     return new Error("This client is not a SigningCosmWasmClient");
   }
+  static async instantiate(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
+  static async instantiate2(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    salt: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
   queryGetError = async(): Promise<String> => {
     return this.client.queryContractSmart(this.contractAddress, { get_error: {} });
   }
-  queryGetRate = async(): Promise<PriceFeedRate[]> => {
+  queryGetRate = async(): Promise<ArrayOfPriceFeedRate> => {
     return this.client.queryContractSmart(this.contractAddress, { get_rate: {} });
   }
   queryGetConfig = async(): Promise<Config> => {
