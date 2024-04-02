@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -78,6 +78,10 @@ export type QueryMsgWithManagers = {
     vesting_managers: {};
 };
 /**
+ * This enum describes the types of sorting that can be applied to some piece of data
+ */
+export type OrderBy = "asc" | "desc";
+/**
  * This structure describes the query messages available in a with_managers vesting contract.
  */
 export type QueryMsgWithManagers1 = {
@@ -122,8 +126,9 @@ export type ExecuteMsgWithManagers = {
 };
 export interface VestingInvestorsSchema {
     responses: Uint128 | Config | QueryMsgHistorical | Binary | Uint64 | VestingAccountResponse | VestingAccountsResponse | VestingState | QueryMsgWithManagers;
-    query: VestingAccountArgs | AvailableAmountArgs | ManagedExtensionArgs | WithManagersExtensionArgs | HistoricalExtensionArgs;
-    execute: ClaimArgs | RegisterVestingAccountsArgs | ProposeNewOwnerArgs | SetVestingTokenArgs | ManagedExtensionArgs1 | WithManagersExtensionArgs1 | HistoricalExtensionArgs1;
+    query: VestingAccountArgs | VestingAccountsArgs | AvailableAmountArgs | ManagedExtensionArgs | WithManagersExtensionArgs | HistoricalExtensionArgs;
+    execute: ClaimArgs | ReceiveArgs | RegisterVestingAccountsArgs | ProposeNewOwnerArgs | SetVestingTokenArgs | ManagedExtensionArgs1 | WithManagersExtensionArgs1 | HistoricalExtensionArgs1;
+    instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
 /**
@@ -254,6 +259,11 @@ export interface VestingState {
 export interface VestingAccountArgs {
     address: string;
 }
+export interface VestingAccountsArgs {
+    limit?: number | null;
+    order_by?: OrderBy | null;
+    start_after?: string | null;
+}
 export interface AvailableAmountArgs {
     address: string;
 }
@@ -281,6 +291,18 @@ export interface ClaimArgs {
      * The address that receives the vested tokens
      */
     recipient?: string | null;
+}
+/**
+ * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
+ */
+export interface ReceiveArgs {
+    description?: "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg";
+    type?: "object";
+    required?: ["amount", "msg", "sender"];
+    properties?: {
+        [k: string]: unknown;
+    };
+    additionalProperties?: never;
 }
 export interface RegisterVestingAccountsArgs {
     vesting_accounts: VestingAccount[];
@@ -326,14 +348,29 @@ export interface HistoricalExtensionArgs1 {
 export interface ExecuteMsgHistorical {
     [k: string]: unknown;
 }
+/**
+ * This structure describes the parameters used for creating a contract.
+ */
+export interface InstantiateMsg {
+    /**
+     * Address allowed to change contract parameters
+     */
+    owner: string;
+    /**
+     * Token info manager address
+     */
+    token_info_manager: string;
+}
 export declare class Client {
     private readonly client;
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     queryConfig: () => Promise<Config>;
     queryVestingAccount: (args: VestingAccountArgs) => Promise<VestingAccountResponse>;
-    queryVestingAccounts: () => Promise<VestingAccountsResponse>;
+    queryVestingAccounts: (args: VestingAccountsArgs) => Promise<VestingAccountsResponse>;
     queryAvailableAmount: (args: AvailableAmountArgs) => Promise<Uint128>;
     queryTimestamp: () => Promise<Uint64>;
     queryVestingState: () => Promise<VestingState>;
@@ -341,7 +378,7 @@ export declare class Client {
     queryWithManagersExtension: (args: WithManagersExtensionArgs) => Promise<QueryMsgWithManagers>;
     queryHistoricalExtension: (args: HistoricalExtensionArgs) => Promise<QueryMsgHistorical>;
     claim: (sender: string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    receive: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    receive: (sender: string, args: ReceiveArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     registerVestingAccounts: (sender: string, args: RegisterVestingAccountsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     proposeNewOwner: (sender: string, args: ProposeNewOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     dropOwnershipProposal: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;

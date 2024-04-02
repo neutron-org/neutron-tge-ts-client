@@ -73,8 +73,7 @@ export type Nullable_Uint1281 = Uint128 | null;
 export type CallbackArgs = {
     update_pool_on_dual_rewards_claim: {
         pool_type: PoolType;
-        prev_ntrn_balance: Uint128;
-        prev_proxy_reward_balances: Asset[];
+        prev_reward_balances: Asset[];
         [k: string]: unknown;
     };
 } | {
@@ -86,98 +85,43 @@ export type CallbackArgs = {
         [k: string]: unknown;
     };
 } | {
-    init_migrate_lockup_to_pcl_pools_callback: {
+    finish_lockup_migration_callback: {
         /**
          * The duration of the lock period.
          */
         duration: number;
         /**
-         * The type of the pool the lockup is related to.
+         * The lockup info from the XYK lockdrop contract. Is used to create a LockupInfoV2 entry on the PCL lockdrop contract's side.
          */
-        pool_type: PoolType;
+        lockup_info: LockupInfoV2;
         /**
-         * The address of the user which owns the lockup.
+         * The address of the LP token of the pool.
          */
-        user_address: Addr;
-        [k: string]: unknown;
-    };
-} | {
-    transfer_all_rewards_before_migration_callback: {
-        /**
-         * The duration of the lock period.
-         */
-        duration: number;
+        lp_token: string;
         /**
          * The type of the pool the lockup is related to.
          */
         pool_type: PoolType;
         /**
-         * The address of the user which owns the lockup.
+         * The amount of staked LP token the PCL lockdrop contract possesses of before liquidity provision and staking to the incentives. Used to calculate LP token amount received for liquidity provision.
          */
-        user_address: Addr;
-        [k: string]: unknown;
-    };
-} | {
-    withdraw_user_lockup_callback: {
-        /**
-         * The amount of LP token to be unstaked and withdrawn.
-         */
-        astroport_lp_amount: Uint128;
-        /**
-         * The address of the pool's liquidity token.
-         */
-        astroport_lp_token: Addr;
-        /**
-         * The duration of the lock period.
-         */
-        duration: number;
-        /**
-         * The address of the generator which possesses the staked liquidity.
-         */
-        generator: Addr;
-        /**
-         * The type of the pool the lockup is related to.
-         */
-        pool_type: PoolType;
+        staked_lp_token_amount: Uint128;
         /**
          * The address of the user which owns the lockup.
          */
         user_address: Addr;
-        [k: string]: unknown;
-    };
-} | {
-    migrate_user_lockup_to_pcl_pair_callback: {
         /**
-         * The duration of the lock period.
+         * The lockup owner's info from the XYK lockdrop contract. Is used to create a UserInfo entry on the PCL lockdrop contract's side.
          */
-        duration: number;
-        /**
-         * The balance in untrn of the XYK lockdrop contract at the third migration step. Is used in the callback to calculate the amount of untrn been withdrawn from the XYK pool.
-         */
-        ntrn_balance: Uint128;
-        /**
-         * The balance in the paired denom of the XYK lockdrop contract at the third migration step. Is used in the callback to calculate the amount of the paired asset been withdrawn from the XYK pool.
-         */
-        paired_asset_balance: Uint128;
-        /**
-         * The denom of the paired asset (the asset paired with untrn in the pool).
-         */
-        paired_asset_denom: string;
-        /**
-         * The type of the pool the lockup is related to.
-         */
-        pool_type: PoolType;
-        /**
-         * The address of the user which owns the lockup.
-         */
-        user_address: Addr;
+        user_info: UserInfo;
         [k: string]: unknown;
     };
 };
-export interface NeutronLockdropSchema {
+export type PoolType2 = "USDC" | "ATOM";
+export interface NeutronLockdropPclSchema {
     responses: Config | LockUpInfoResponse | PoolInfo | Nullable_Uint128 | Nullable_Uint1281 | StateResponse | UserInfoResponse | UserInfoWithListResponse;
     query: PoolArgs | UserInfoArgs | UserInfoWithLockupsListArgs | LockUpInfoArgs | QueryUserLockupTotalAtHeightArgs | QueryLockupTotalAtHeightArgs;
-    execute: IncreaseLockupForArgs | ReceiveArgs | UpdateConfigArgs | SetTokenInfoArgs | WithdrawFromLockupArgs | ClaimRewardsAndOptionallyUnlockArgs | CallbackArgs | ProposeNewOwnerArgs | MigrateLiquidityToPclPoolsArgs;
+    execute: UpdateConfigArgs | ClaimRewardsAndOptionallyUnlockArgs | CallbackArgs | ProposeNewOwnerArgs | MigrateXykLiquidityArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -191,17 +135,9 @@ export interface Config {
      */
     credits_contract: Addr;
     /**
-     * Generator (Staking for dual rewards) contract address
+     * Incentives contract address
      */
-    generator?: Addr | null;
-    /**
-     * Timestamp when Contract will start accepting LP Token deposits
-     */
-    init_timestamp: number;
-    /**
-     * Number of seconds during which lockup positions be accepted
-     */
-    lock_window: number;
+    incentives: Addr;
     /**
      * Total NTRN lockdrop incentives to be distributed among the users
      */
@@ -211,29 +147,13 @@ export interface Config {
      */
     lockup_rewards_info: LockupRewardsInfo[];
     /**
-     * Max. no. of weeks allowed for lockup
-     */
-    max_lock_duration: number;
-    /**
-     * Max lockup positions a user can have
-     */
-    max_positions_per_user: number;
-    /**
-     * Min. no. of weeks allowed for lockup
-     */
-    min_lock_duration: number;
-    /**
      * Account which can update the config
      */
     owner: Addr;
     /**
-     * Account which can update the generator and token addresses
+     * Original XYK lockdrop contract address
      */
-    token_info_manager: Addr;
-    /**
-     * Withdrawal Window Length :: Post the deposit window
-     */
-    withdrawal_window: number;
+    xyk_lockdrop_contract: Addr;
     [k: string]: unknown;
 }
 export interface LockupRewardsInfo {
@@ -249,22 +169,14 @@ export interface LockUpInfoResponse {
      */
     astroport_lp_units?: Uint128 | null;
     /**
-     * ASTRO tokens receivable as generator rewards that user can claim
+     * Tokens receivable as incentives rewards that user can claim
      */
-    claimable_generator_astro_debt: Uint128;
-    /**
-     * Proxy tokens receivable as generator rewards that user can claim
-     */
-    claimable_generator_proxy_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
+    claimable_incentives_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
     duration: number;
     /**
-     * Generator NTRN tokens lockup received as generator rewards
+     * incentives tokens lockup received as incentives rewards
      */
-    generator_ntrn_debt: Uint128;
-    /**
-     * Generator Proxy tokens lockup received as generator rewards
-     */
-    generator_proxy_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
+    incentives_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
     /**
      * Terraswap LP units locked by the user
      */
@@ -290,21 +202,13 @@ export interface LockUpInfoResponse {
 export interface PoolInfo {
     amount_in_lockups: Uint128;
     /**
-     * Ratio of Generator NTRN rewards accured to astroport pool share
+     * Ratio of incentives rewards accured to astroport pool share
      */
-    generator_ntrn_per_share: Decimal;
-    /**
-     * Ratio of Generator Proxy rewards accured to astroport pool share
-     */
-    generator_proxy_per_share: RestrictedVectorFor_AssetInfoAnd_Decimal;
+    incentives_rewards_per_share: RestrictedVectorFor_AssetInfoAnd_Decimal;
     /**
      * Share of total NTRN incentives allocated to this pool
      */
     incentives_share: Uint128;
-    /**
-     * Boolean value indicating if the LP Tokens are staked with the Generator contract or not
-     */
-    is_staked: boolean;
     lp_token: Addr;
     /**
      * Weighted LP Token balance used to calculate NTRN rewards a particular user can claim
@@ -325,9 +229,9 @@ export interface StateResponse {
 }
 export interface UserInfoResponse {
     /**
-     * NTRN tokens receivable as generator rewards that user can claim
+     * Tokens receivable as incentives rewards that user can claim
      */
-    claimable_generator_ntrn_debt: Uint128;
+    claimable_incentives_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
     /**
      * Lockup positions
      */
@@ -354,22 +258,14 @@ export interface LockUpInfoResponse1 {
      */
     astroport_lp_units?: Uint128 | null;
     /**
-     * ASTRO tokens receivable as generator rewards that user can claim
+     * Tokens receivable as incentives rewards that user can claim
      */
-    claimable_generator_astro_debt: Uint128;
-    /**
-     * Proxy tokens receivable as generator rewards that user can claim
-     */
-    claimable_generator_proxy_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
+    claimable_incentives_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
     duration: number;
     /**
-     * Generator NTRN tokens lockup received as generator rewards
+     * incentives tokens lockup received as incentives rewards
      */
-    generator_ntrn_debt: Uint128;
-    /**
-     * Generator Proxy tokens lockup received as generator rewards
-     */
-    generator_proxy_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
+    incentives_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
     /**
      * Terraswap LP units locked by the user
      */
@@ -439,51 +335,15 @@ export interface QueryLockupTotalAtHeightArgs {
     height: number;
     pool_type: PoolType;
 }
-export interface IncreaseLockupForArgs {
-    amount: Uint128;
-    duration: number;
-    pool_type: PoolType;
-    user_address: string;
-    [k: string]: unknown;
-}
-/**
- * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
- */
-export interface ReceiveArgs {
-    description?: "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg";
-    type?: "object";
-    required?: ["amount", "msg", "sender"];
-    properties?: {
-        [k: string]: unknown;
-    };
-    additionalProperties?: never;
-}
 export interface UpdateConfigArgs {
     new_config: UpdateConfigMsg;
     [k: string]: unknown;
 }
 export interface UpdateConfigMsg {
     /**
-     * Bootstrap Auction contract address
+     * incentives (Staking for dual rewards) contract address
      */
-    auction_contract_address?: string | null;
-    /**
-     * Generator (Staking for dual rewards) contract address
-     */
-    generator_address?: string | null;
-    [k: string]: unknown;
-}
-export interface SetTokenInfoArgs {
-    atom_token: string;
-    generator: string;
-    usdc_token: string;
-    [k: string]: unknown;
-}
-export interface WithdrawFromLockupArgs {
-    amount: Uint128;
-    duration: number;
-    pool_type: PoolType;
-    user_address: string;
+    incentives_address?: string | null;
     [k: string]: unknown;
 }
 export interface ClaimRewardsAndOptionallyUnlockArgs {
@@ -505,6 +365,49 @@ export interface Asset {
      */
     info: AssetInfo;
 }
+export interface LockupInfoV2 {
+    astroport_lp_transferred?: Uint128 | null;
+    /**
+     * Generator NTRN tokens loockup received as generator rewards
+     */
+    generator_ntrn_debt: Uint128;
+    /**
+     * Generator Proxy tokens lockup received as generator rewards
+     */
+    generator_proxy_debt: RestrictedVectorFor_AssetInfoAnd_Uint128;
+    /**
+     * Terraswap LP units locked by the user
+     */
+    lp_units_locked: Uint128;
+    /**
+     * NTRN tokens received as rewards for participation in the lockdrop
+     */
+    ntrn_rewards: Uint128;
+    /**
+     * Timestamp beyond which this position can be unlocked
+     */
+    unlock_timestamp: number;
+    /**
+     * Boolean value indicating if the user's has withdrawn funds post the only 1 withdrawal limit cutoff
+     */
+    withdrawal_flag: boolean;
+    [k: string]: unknown;
+}
+export interface UserInfo {
+    /**
+     * Number of lockup positions the user is having
+     */
+    lockup_positions_index: number;
+    /**
+     * NTRN tokens transferred to user
+     */
+    ntrn_transferred: boolean;
+    /**
+     * Total NTRN tokens user received as rewards for participation in the lockdrop
+     */
+    total_ntrn_rewards: Uint128;
+    [k: string]: unknown;
+}
 export interface ProposeNewOwnerArgs {
     /**
      * The date after which this proposal expires
@@ -516,14 +419,42 @@ export interface ProposeNewOwnerArgs {
     owner: string;
     [k: string]: unknown;
 }
-export interface MigrateLiquidityToPclPoolsArgs {
+export interface MigrateXykLiquidityArgs {
     /**
-     * The address which liquidity is supposed to be transferred. If no user address is provided, the message sender's address is used.
+     * The duration of the lock period.
      */
-    user_address_raw?: string | null;
+    duration: number;
+    /**
+     * The lockup info from the XYK lockdrop contract. Is used to create a LockupInfoV2 entry on the PCL lockdrop contract's side.
+     */
+    lockup_info: LockupInfoV2;
+    /**
+     * The type of the pool the lockup is related to.
+     */
+    pool_type: PoolType2;
+    /**
+     * The address of the user which owns the lockup.
+     */
+    user_address_raw: string;
+    /**
+     * The lockup owner's info from the XYK lockdrop contract. Is used to create a UserInfo entry on the PCL lockdrop contract's side.
+     */
+    user_info: UserInfo;
     [k: string]: unknown;
 }
 export interface InstantiateMsg {
+    /**
+     * Share of total NTRN incentives allocated to the NTRN/ATOM PCL pool
+     */
+    atom_incentives_share: Uint128;
+    /**
+     * Address of the LP token of the NTRN/ATOM PCL pool
+     */
+    atom_token: string;
+    /**
+     * Weighted LP Token balance used to calculate NTRN rewards a particular NTRN/ATOM pool depositor can claim
+     */
+    atom_weighted_amount: Uint256;
     /**
      * Auction contract address
      */
@@ -533,41 +464,37 @@ export interface InstantiateMsg {
      */
     credits_contract: string;
     /**
-     * Timestamp when Contract will start accepting LP Token deposits
+     * Incentives (Staking for dual rewards) contract address
      */
-    init_timestamp: number;
+    incentives: string;
     /**
-     * Number of seconds during which lockup deposits will be accepted
+     * Total NTRN lockdrop incentives distributed among the users.
      */
-    lock_window: number;
+    lockdrop_incentives: Uint128;
     /**
      * Describes rewards coefficients for each lockup duration
      */
     lockup_rewards_info: LockupRewardsInfo[];
     /**
-     * Max. no. of weeks allowed for lockup
-     */
-    max_lock_duration: number;
-    /**
-     * Max lockup positions a user can have
-     */
-    max_positions_per_user: number;
-    /**
-     * Min. no. of weeks allowed for lockup
-     */
-    min_lock_duration: number;
-    /**
      * Account which can update config
      */
     owner?: string | null;
     /**
-     * Account which can update token addresses and generator
+     * Share of total NTRN incentives allocated to the NTRN/USDC PCL pool
      */
-    token_info_manager: string;
+    usdc_incentives_share: Uint128;
     /**
-     * Withdrawal Window Length :: Post the deposit window
+     * Address of the LP token of the NTRN/USDC PCL pool
      */
-    withdrawal_window: number;
+    usdc_token: string;
+    /**
+     * Weighted LP Token balance used to calculate NTRN rewards a particular NTRN/USDC pool depositor can claim
+     */
+    usdc_weighted_amount: Uint256;
+    /**
+     * Original XYK lockdrop contract address
+     */
+    xyk_lockdrop_contract: string;
     [k: string]: unknown;
 }
 export declare class Client {
@@ -585,16 +512,11 @@ export declare class Client {
     queryLockUpInfo: (args: LockUpInfoArgs) => Promise<LockUpInfoResponse>;
     queryQueryUserLockupTotalAtHeight: (args: QueryUserLockupTotalAtHeightArgs) => Promise<Nullable_Uint128>;
     queryQueryLockupTotalAtHeight: (args: QueryLockupTotalAtHeightArgs) => Promise<Nullable_Uint128>;
-    increaseLockupFor: (sender: string, args: IncreaseLockupForArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    receive: (sender: string, args: ReceiveArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    increaseNtrnIncentives: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    setTokenInfo: (sender: string, args: SetTokenInfoArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    withdrawFromLockup: (sender: string, args: WithdrawFromLockupArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     claimRewardsAndOptionallyUnlock: (sender: string, args: ClaimRewardsAndOptionallyUnlockArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     callback: (sender: string, args: CallbackArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     proposeNewOwner: (sender: string, args: ProposeNewOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     dropOwnershipProposal: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     claimOwnership: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    migrateLiquidityToPclPools: (sender: string, args: MigrateLiquidityToPclPoolsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    migrateXykLiquidity: (sender: string, args: MigrateXykLiquidityArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }
