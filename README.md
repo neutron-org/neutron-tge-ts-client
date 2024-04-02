@@ -19,5 +19,6 @@ const res = await auctionClient.setTokenInfo(address, {
 ```
 
 ## How to update
+* have node >= 20.0.0 installed
 * have your contracts in `tge-contracts` folder
 * run `$ npx @neutron-org/contracts2ts --src ./tge-contracts --out ./<path_to_this_code>/src`
