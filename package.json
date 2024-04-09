@@ -6,7 +6,7 @@
   "author": "Sergey Ratiashvili <serg.s.r@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "@cosmjs/amino": "^0.32.2",
+    "@cosmjs/amino": "^0.32.3",
     "@cosmjs/cosmwasm-stargate": "^0.32.2"
   },
   "scripts": {
