@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate"; 
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -26,9 +26,7 @@ export type Expiration =
       at_time: Timestamp;
     }
   | {
-      never: {
-        [k: string]: unknown;
-      };
+      never: {};
     };
 /**
  * A point in time in nanosecond precision.
@@ -85,10 +83,13 @@ export interface CreditsSchema {
     | VestedAmountArgs
     | AllocationArgs
     | BalanceArgs
+    | TotalSupplyAtHeightArgs
     | BalanceAtHeightArgs
     | AllowanceArgs
-    | AllAllowancesArgs;
+    | AllAllowancesArgs
+    | AllAccountsArgs;
   execute: UpdateConfigArgs | AddVestingArgs | TransferArgs | BurnArgs | BurnFromArgs;
+  instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
 export interface AllAccountsResponse {
@@ -103,7 +104,6 @@ export interface AllowanceInfo {
   allowance: Uint128;
   expires: Expiration;
   spender: string;
-  [k: string]: unknown;
 }
 export interface Allocation {
   /**
@@ -142,11 +142,9 @@ export interface AllowanceResponse {
 }
 export interface BalanceResponse {
   balance: Uint128;
-  [k: string]: unknown;
 }
 export interface BalanceResponse1 {
   balance: Uint128;
-  [k: string]: unknown;
 }
 export interface Config {
   /**
@@ -173,14 +171,12 @@ export interface MinterResponse {
    */
   cap?: Uint128 | null;
   minter: string;
-  [k: string]: unknown;
 }
 export interface TokenInfoResponse {
   decimals: number;
   name: string;
   symbol: string;
   total_supply: Uint128;
-  [k: string]: unknown;
 }
 export interface TotalSupplyResponse {
   total_supply: Uint128;
@@ -212,6 +208,9 @@ export interface AllocationArgs {
 export interface BalanceArgs {
   address: string;
 }
+export interface TotalSupplyAtHeightArgs {
+  height?: number | null;
+}
 export interface BalanceAtHeightArgs {
   address: string;
   height?: number | null;
@@ -223,6 +222,10 @@ export interface AllowanceArgs {
 export interface AllAllowancesArgs {
   limit?: number | null;
   owner: string;
+  start_after?: string | null;
+}
+export interface AllAccountsArgs {
+  limit?: number | null;
   start_after?: string | null;
 }
 export interface UpdateConfigArgs {
@@ -265,6 +268,10 @@ export interface BurnFromArgs {
   owner: string;
   [k: string]: unknown;
 }
+export interface InstantiateMsg {
+  dao_address: string;
+  [k: string]: unknown;
+}
 
 
 function isSigningCosmWasmClient(
@@ -283,6 +290,35 @@ export class Client {
   mustBeSigningClient() {
     return new Error("This client is not a SigningCosmWasmClient");
   }
+  static async instantiate(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
+  static async instantiate2(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    salt: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
   queryWithdrawableAmount = async(args: WithdrawableAmountArgs): Promise<WithdrawableAmountResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { withdrawable_amount: args });
   }
@@ -295,8 +331,8 @@ export class Client {
   queryBalance = async(args: BalanceArgs): Promise<BalanceResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { balance: args });
   }
-  queryTotalSupplyAtHeight = async(): Promise<TotalSupplyResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { total_supply_at_height: {} });
+  queryTotalSupplyAtHeight = async(args: TotalSupplyAtHeightArgs): Promise<TotalSupplyResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { total_supply_at_height: args });
   }
   queryBalanceAtHeight = async(args: BalanceAtHeightArgs): Promise<BalanceResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { balance_at_height: args });
@@ -313,8 +349,8 @@ export class Client {
   queryAllAllowances = async(args: AllAllowancesArgs): Promise<AllAllowancesResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { all_allowances: args });
   }
-  queryAllAccounts = async(): Promise<AllAccountsResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { all_accounts: {} });
+  queryAllAccounts = async(args: AllAccountsArgs): Promise<AllAccountsResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { all_accounts: args });
   }
   queryConfig = async(): Promise<Config> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });

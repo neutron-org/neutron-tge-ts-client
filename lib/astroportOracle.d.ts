@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -24,6 +24,18 @@ export type AssetInfo = {
  */
 export type Addr = string;
 /**
+ * This enum describes available pair types. ## Available pool types ``` # use astroport::factory::PairType::{Custom, Stable, Xyk}; Xyk {}; Stable {}; Custom(String::from("Custom")); ```
+ */
+export type PairType = {
+    xyk: {};
+} | {
+    stable: {};
+} | {
+    concentrated: {};
+} | {
+    custom: string;
+};
+/**
  * An implementation of u256 that is using strings for JSON encoding/decoding, such that the full u256 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
  *
  * # Examples
@@ -33,14 +45,15 @@ export type Addr = string;
  * ``` # use cosmwasm_std::Uint256; let a = Uint256::from(258u128); let b = Uint256::new([ 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 1u8, 2u8, ]); assert_eq!(a, b); ```
  */
 export type Uint256 = string;
-export type TupleOf_AssetInfoAnd_Uint256 = [AssetInfo, Uint256][];
+export type ArrayOfTupleOf_AssetInfoAnd_Uint256 = [AssetInfo, Uint256][];
+export type Uint64 = number;
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal256(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 115792089237316195423570985008687907853269984665640564039457.584007913129639935 (which is (2^256 - 1) / 10^18)
  */
 export type Decimal256 = string;
-export type TupleOf_AssetInfoAnd_Decimal256 = [AssetInfo, Decimal256][];
+export type ArrayOfTupleOf_AssetInfoAnd_Decimal256 = [AssetInfo, Decimal256][];
 /**
  * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
  *
@@ -66,12 +79,63 @@ export type Uint128 = string;
  *
  * let b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```
  */
-export type Uint64 = string;
+export type Uint641 = string;
 export interface AstroportOracleSchema {
-    responses: TupleOf_AssetInfoAnd_Uint256 | TupleOf_AssetInfoAnd_Decimal256;
+    responses: Config | ArrayOfTupleOf_AssetInfoAnd_Uint256 | Uint64 | ArrayOfTupleOf_AssetInfoAnd_Decimal256;
     query: ConsultArgs | TWAPAtHeightArgs;
     execute: UpdatePeriodArgs | UpdateManagerArgs;
+    instantiate?: InstantiateMsg;
     [k: string]: unknown;
+}
+/**
+ * Global configuration for the contract
+ */
+export interface Config {
+    /**
+     * The assets in the pool. Each asset is described using a [`AssetInfo`]
+     */
+    asset_infos?: AssetInfo[] | null;
+    /**
+     * The factory contract address
+     */
+    factory: Addr;
+    /**
+     * Manager is the only one who can set pair info, if not set already
+     */
+    manager: Addr;
+    /**
+     * The address that's allowed to change contract parameters
+     */
+    owner: Addr;
+    /**
+     * Information about the pair (LP token address, pair type etc)
+     */
+    pair?: PairInfo | null;
+    /**
+     * Time between two consecutive TWAP updates.
+     */
+    period: number;
+}
+/**
+ * This structure stores the main parameters for an Astroport pair
+ */
+export interface PairInfo {
+    /**
+     * Asset information for the assets in the pool
+     */
+    asset_infos: AssetInfo[];
+    /**
+     * Pair contract address
+     */
+    contract_addr: Addr;
+    /**
+     * Pair LP token address
+     */
+    liquidity_token: Addr;
+    /**
+     * The pool type (xyk, stableswap etc) available in [`PairType`]
+     */
+    pair_type: PairType;
 }
 export interface ConsultArgs {
     /**
@@ -87,7 +151,7 @@ export interface TWAPAtHeightArgs {
     /**
      * The amount of tokens for which to compute the token price
      */
-    height: Uint64;
+    height: Uint641;
     /**
      * The asset for which to compute a new TWAP value
      */
@@ -99,13 +163,34 @@ export interface UpdatePeriodArgs {
 export interface UpdateManagerArgs {
     new_manager: string;
 }
+/**
+ * This structure stores general parameters for the contract. Modified by us
+ */
+export interface InstantiateMsg {
+    /**
+     * The factory contract address
+     */
+    factory_contract: string;
+    /**
+     * Manager is the only one who can set pair info, if not set already
+     */
+    manager: string;
+    /**
+     * Minimal interval between Update{}'s
+     */
+    period: number;
+}
 export declare class Client {
     private readonly client;
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
-    queryConsult: (args: ConsultArgs) => Promise<TupleOf_AssetInfoAnd_Uint256[]>;
-    queryTWAPAtHeight: (args: TWAPAtHeightArgs) => Promise<TupleOf_AssetInfoAnd_Decimal256[]>;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
+    queryConsult: (args: ConsultArgs) => Promise<ArrayOfTupleOf_AssetInfoAnd_Uint256>;
+    queryTWAPAtHeight: (args: TWAPAtHeightArgs) => Promise<ArrayOfTupleOf_AssetInfoAnd_Decimal256>;
+    queryConfig: () => Promise<Config>;
+    queryLastUpdateTimestamp: () => Promise<Uint64>;
     update: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updatePeriod: (sender: string, args: UpdatePeriodArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateManager: (sender: string, args: UpdateManagerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;

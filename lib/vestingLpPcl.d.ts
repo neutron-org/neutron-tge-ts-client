@@ -101,64 +101,6 @@ export type QueryMsgHistorical1 = {
     };
 };
 /**
- * This structure describes the execute messages available in a vesting contract.
- */
-export type BaseArgs = {
-    claim: {
-        /**
-         * The amount of tokens to claim
-         */
-        amount?: Uint1281 | null;
-        /**
-         * The address that receives the vested tokens
-         */
-        recipient?: string | null;
-    };
-} | {
-    receive: Cw20ReceiveMsg;
-} | {
-    register_vesting_accounts: {
-        vesting_accounts: VestingAccount[];
-    };
-} | {
-    propose_new_owner: {
-        /**
-         * The validity period of the offer to change the owner
-         */
-        expires_in: number;
-        /**
-         * The newly proposed owner
-         */
-        owner: string;
-    };
-} | {
-    drop_ownership_proposal: {};
-} | {
-    claim_ownership: {};
-} | {
-    set_vesting_token: {
-        vesting_token: AssetInfo;
-    };
-} | {
-    managed_extension: {
-        msg: ExecuteMsgManaged;
-    };
-} | {
-    with_managers_extension: {
-        msg: ExecuteMsgWithManagers;
-    };
-} | {
-    historical_extension: {
-        msg: ExecuteMsgHistorical;
-    };
-};
-/**
- * Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.
- *
- * This is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.
- */
-export type Binary1 = string;
-/**
  * This structure describes the execute messages available in a managed vesting contract.
  */
 export type ExecuteMsgManaged = {
@@ -182,42 +124,10 @@ export type ExecuteMsgWithManagers = {
         managers: string[];
     };
 };
-export type CallbackArgs = {
-    migrate_liquidity_to_cl_pair: {
-        amount: Uint1281;
-        cl_pair: Addr;
-        ntrn_denom: string;
-        paired_asset_denom: string;
-        slippage_tolerance: Decimal;
-        user: VestingAccountResponse1;
-        xyk_lp_token: Addr;
-        xyk_pair: Addr;
-    };
-} | {
-    provide_liquidity_to_cl_pair_after_withdrawal: {
-        cl_pair: Addr;
-        ntrn_denom: string;
-        ntrn_init_balance: Uint1281;
-        paired_asset_denom: string;
-        paired_asset_init_balance: Uint1281;
-        slippage_tolerance: Decimal;
-        user: VestingAccountResponse1;
-    };
-} | {
-    post_migration_vesting_reschedule: {
-        user: VestingAccountResponse1;
-    };
-};
-/**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
- *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal = string;
-export interface VestingLpSchema {
+export interface VestingLpPclSchema {
     responses: Uint128 | Config | QueryMsgHistorical | Binary | Uint64 | VestingAccountResponse | VestingAccountsResponse | VestingState | QueryMsgWithManagers;
     query: VestingAccountArgs | VestingAccountsArgs | AvailableAmountArgs | ManagedExtensionArgs | WithManagersExtensionArgs | HistoricalExtensionArgs;
-    execute: BaseArgs | MigrateLiquidityToPclPoolArgs | CallbackArgs;
+    execute: ClaimArgs | RegisterVestingAccountsArgs | ProposeNewOwnerArgs | SetVestingTokenArgs | ManagedExtensionArgs1 | WithManagersExtensionArgs1 | HistoricalExtensionArgs1 | ReceiveArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -372,13 +282,18 @@ export interface WithManagersExtensionArgs {
 export interface HistoricalExtensionArgs {
     msg: QueryMsgHistorical1;
 }
-/**
- * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
- */
-export interface Cw20ReceiveMsg {
-    amount: Uint1281;
-    msg: Binary1;
-    sender: string;
+export interface ClaimArgs {
+    /**
+     * The amount of tokens to claim
+     */
+    amount?: Uint1281 | null;
+    /**
+     * The address that receives the vested tokens
+     */
+    recipient?: string | null;
+}
+export interface RegisterVestingAccountsArgs {
+    vesting_accounts: VestingAccount[];
 }
 /**
  * This structure stores vesting information for a specific address that is getting tokens.
@@ -393,14 +308,45 @@ export interface VestingAccount {
      */
     schedules: VestingSchedule[];
 }
+export interface ProposeNewOwnerArgs {
+    /**
+     * The validity period of the offer to change the owner
+     */
+    expires_in: number;
+    /**
+     * The newly proposed owner
+     */
+    owner: string;
+}
+export interface SetVestingTokenArgs {
+    vesting_token: AssetInfo;
+}
+export interface ManagedExtensionArgs1 {
+    msg: ExecuteMsgManaged;
+}
+export interface WithManagersExtensionArgs1 {
+    msg: ExecuteMsgWithManagers;
+}
+export interface HistoricalExtensionArgs1 {
+    msg: ExecuteMsgHistorical;
+}
 /**
  * This structure describes the execute messages available in a historical vesting contract.
  */
 export interface ExecuteMsgHistorical {
     [k: string]: unknown;
 }
-export interface MigrateLiquidityToPclPoolArgs {
-    user?: string | null;
+/**
+ * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
+ */
+export interface ReceiveArgs {
+    description?: "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg";
+    type?: "object";
+    required?: ["amount", "msg", "sender"];
+    properties?: {
+        [k: string]: unknown;
+    };
+    additionalProperties?: never;
 }
 /**
  * This structure describes the parameters used for creating a contract.
@@ -418,6 +364,8 @@ export interface InstantiateMsg {
      * Initial list of whitelisted vesting managers
      */
     vesting_managers: string[];
+    vesting_token: AssetInfo;
+    xyk_vesting_lp_contract: string;
 }
 export declare class Client {
     private readonly client;
@@ -435,7 +383,14 @@ export declare class Client {
     queryManagedExtension: (args: ManagedExtensionArgs) => Promise<Binary>;
     queryWithManagersExtension: (args: WithManagersExtensionArgs) => Promise<QueryMsgWithManagers>;
     queryHistoricalExtension: (args: HistoricalExtensionArgs) => Promise<QueryMsgHistorical>;
-    base: (sender: string, args: BaseArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    migrateLiquidityToPclPool: (sender: string, args: MigrateLiquidityToPclPoolArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    callback: (sender: string, args: CallbackArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    claim: (sender: string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    registerVestingAccounts: (sender: string, args: RegisterVestingAccountsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    proposeNewOwner: (sender: string, args: ProposeNewOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    dropOwnershipProposal: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    claimOwnership: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    setVestingToken: (sender: string, args: SetVestingTokenArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    managedExtension: (sender: string, args: ManagedExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    withManagersExtension: (sender: string, args: WithManagersExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    historicalExtension: (sender: string, args: HistoricalExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    receive: (sender: string, args: ReceiveArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }

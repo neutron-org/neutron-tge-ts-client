@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate"; 
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -54,6 +54,12 @@ export type QueryMsgHistorical =
         height: number;
       };
     };
+/**
+ * Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.
+ *
+ * This is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.
+ */
+export type Binary = string;
 export type Uint64 = number;
 /**
  * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
@@ -76,6 +82,10 @@ export type QueryMsgWithManagers = {
   vesting_managers: {};
 };
 /**
+ * This enum describes the types of sorting that can be applied to some piece of data
+ */
+export type OrderBy = "asc" | "desc";
+/**
  * This structure describes the query messages available in a with_managers vesting contract.
  */
 export type QueryMsgWithManagers1 = {
@@ -96,6 +106,74 @@ export type QueryMsgHistorical1 =
         height: number;
       };
     };
+/**
+ * This structure describes the execute messages available in a vesting contract.
+ */
+export type BaseArgs =
+  | {
+      claim: {
+        /**
+         * The amount of tokens to claim
+         */
+        amount?: Uint1281 | null;
+        /**
+         * The address that receives the vested tokens
+         */
+        recipient?: string | null;
+      };
+    }
+  | {
+      receive: Cw20ReceiveMsg;
+    }
+  | {
+      register_vesting_accounts: {
+        vesting_accounts: VestingAccount[];
+      };
+    }
+  | {
+      propose_new_owner: {
+        /**
+         * The validity period of the offer to change the owner
+         */
+        expires_in: number;
+        /**
+         * The newly proposed owner
+         */
+        owner: string;
+      };
+    }
+  | {
+      drop_ownership_proposal: {};
+    }
+  | {
+      claim_ownership: {};
+    }
+  | {
+      set_vesting_token: {
+        vesting_token: AssetInfo;
+      };
+    }
+  | {
+      managed_extension: {
+        msg: ExecuteMsgManaged;
+      };
+    }
+  | {
+      with_managers_extension: {
+        msg: ExecuteMsgWithManagers;
+      };
+    }
+  | {
+      historical_extension: {
+        msg: ExecuteMsgHistorical;
+      };
+    };
+/**
+ * Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.
+ *
+ * This is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.
+ */
+export type Binary1 = string;
 /**
  * This structure describes the execute messages available in a managed vesting contract.
  */
@@ -122,13 +200,48 @@ export type ExecuteMsgWithManagers =
         managers: string[];
       };
     };
+export type CallbackArgs =
+  | {
+      migrate_liquidity_to_cl_pair: {
+        amount: Uint1281;
+        cl_pair: Addr;
+        ntrn_denom: string;
+        paired_asset_denom: string;
+        slippage_tolerance: Decimal;
+        user: VestingAccountResponse1;
+        xyk_lp_token: Addr;
+        xyk_pair: Addr;
+      };
+    }
+  | {
+      provide_liquidity_to_cl_pair_after_withdrawal: {
+        cl_pair: Addr;
+        ntrn_denom: string;
+        ntrn_init_balance: Uint1281;
+        paired_asset_denom: string;
+        paired_asset_init_balance: Uint1281;
+        slippage_tolerance: Decimal;
+        user: VestingAccountResponse1;
+      };
+    }
+  | {
+      post_migration_vesting_reschedule: {
+        user: VestingAccountResponse1;
+      };
+    };
+/**
+ * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ *
+ * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
+ */
+export type Decimal = string;
 
 export interface VestingLpSchema {
   responses:
     | Uint128
     | Config
     | QueryMsgHistorical
-    | QueryMsgManaged
+    | Binary
     | Uint64
     | VestingAccountResponse
     | VestingAccountsResponse
@@ -136,18 +249,13 @@ export interface VestingLpSchema {
     | QueryMsgWithManagers;
   query:
     | VestingAccountArgs
+    | VestingAccountsArgs
     | AvailableAmountArgs
     | ManagedExtensionArgs
     | WithManagersExtensionArgs
     | HistoricalExtensionArgs;
-  execute:
-    | ClaimArgs
-    | RegisterVestingAccountsArgs
-    | ProposeNewOwnerArgs
-    | SetVestingTokenArgs
-    | ManagedExtensionArgs1
-    | WithManagersExtensionArgs1
-    | HistoricalExtensionArgs1;
+  execute: BaseArgs | MigrateLiquidityToPclPoolArgs | CallbackArgs;
+  instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
 /**
@@ -187,12 +295,6 @@ export interface Extensions {
    * Whether the with_managers extension is enabled for the contract.
    */
   with_managers: boolean;
-}
-/**
- * This structure describes the query messages available in a managed vesting contract.
- */
-export interface QueryMsgManaged {
-  [k: string]: unknown;
 }
 /**
  * This structure describes a custom struct used to return vesting data about a specific vesting target.
@@ -284,16 +386,21 @@ export interface VestingState {
 export interface VestingAccountArgs {
   address: string;
 }
+export interface VestingAccountsArgs {
+  limit?: number | null;
+  order_by?: OrderBy | null;
+  start_after?: string | null;
+}
 export interface AvailableAmountArgs {
   address: string;
 }
 export interface ManagedExtensionArgs {
-  msg: QueryMsgManaged1;
+  msg: QueryMsgManaged;
 }
 /**
  * This structure describes the query messages available in a managed vesting contract.
  */
-export interface QueryMsgManaged1 {
+export interface QueryMsgManaged {
   [k: string]: unknown;
 }
 export interface WithManagersExtensionArgs {
@@ -302,18 +409,13 @@ export interface WithManagersExtensionArgs {
 export interface HistoricalExtensionArgs {
   msg: QueryMsgHistorical1;
 }
-export interface ClaimArgs {
-  /**
-   * The amount of tokens to claim
-   */
-  amount?: Uint1281 | null;
-  /**
-   * The address that receives the vested tokens
-   */
-  recipient?: string | null;
-}
-export interface RegisterVestingAccountsArgs {
-  vesting_accounts: VestingAccount[];
+/**
+ * Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg
+ */
+export interface Cw20ReceiveMsg {
+  amount: Uint1281;
+  msg: Binary1;
+  sender: string;
 }
 /**
  * This structure stores vesting information for a specific address that is getting tokens.
@@ -328,33 +430,31 @@ export interface VestingAccount {
    */
   schedules: VestingSchedule[];
 }
-export interface ProposeNewOwnerArgs {
-  /**
-   * The validity period of the offer to change the owner
-   */
-  expires_in: number;
-  /**
-   * The newly proposed owner
-   */
-  owner: string;
-}
-export interface SetVestingTokenArgs {
-  vesting_token: AssetInfo;
-}
-export interface ManagedExtensionArgs1 {
-  msg: ExecuteMsgManaged;
-}
-export interface WithManagersExtensionArgs1 {
-  msg: ExecuteMsgWithManagers;
-}
-export interface HistoricalExtensionArgs1 {
-  msg: ExecuteMsgHistorical;
-}
 /**
  * This structure describes the execute messages available in a historical vesting contract.
  */
 export interface ExecuteMsgHistorical {
   [k: string]: unknown;
+}
+export interface MigrateLiquidityToPclPoolArgs {
+  user?: string | null;
+}
+/**
+ * This structure describes the parameters used for creating a contract.
+ */
+export interface InstantiateMsg {
+  /**
+   * Address allowed to change contract parameters
+   */
+  owner: string;
+  /**
+   * Token info manager address
+   */
+  token_info_manager: string;
+  /**
+   * Initial list of whitelisted vesting managers
+   */
+  vesting_managers: string[];
 }
 
 
@@ -374,14 +474,43 @@ export class Client {
   mustBeSigningClient() {
     return new Error("This client is not a SigningCosmWasmClient");
   }
+  static async instantiate(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
+  static async instantiate2(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    salt: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
   queryConfig = async(): Promise<Config> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
   queryVestingAccount = async(args: VestingAccountArgs): Promise<VestingAccountResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { vesting_account: args });
   }
-  queryVestingAccounts = async(): Promise<VestingAccountsResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { vesting_accounts: {} });
+  queryVestingAccounts = async(args: VestingAccountsArgs): Promise<VestingAccountsResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { vesting_accounts: args });
   }
   queryAvailableAmount = async(args: AvailableAmountArgs): Promise<Uint128> => {
     return this.client.queryContractSmart(this.contractAddress, { available_amount: args });
@@ -392,7 +521,7 @@ export class Client {
   queryVestingState = async(): Promise<VestingState> => {
     return this.client.queryContractSmart(this.contractAddress, { vesting_state: {} });
   }
-  queryManagedExtension = async(args: ManagedExtensionArgs): Promise<QueryMsgManaged> => {
+  queryManagedExtension = async(args: ManagedExtensionArgs): Promise<Binary> => {
     return this.client.queryContractSmart(this.contractAddress, { managed_extension: args });
   }
   queryWithManagersExtension = async(args: WithManagersExtensionArgs): Promise<QueryMsgWithManagers> => {
@@ -401,44 +530,16 @@ export class Client {
   queryHistoricalExtension = async(args: HistoricalExtensionArgs): Promise<QueryMsgHistorical> => {
     return this.client.queryContractSmart(this.contractAddress, { historical_extension: args });
   }
-  claim = async(sender:string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  base = async(sender:string, args: BaseArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, { base: args }, fee || "auto", memo, funds);
   }
-  receive = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  migrateLiquidityToPclPool = async(sender:string, args: MigrateLiquidityToPclPoolArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { receive: {} }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, { migrate_liquidity_to_pcl_pool: args }, fee || "auto", memo, funds);
   }
-  registerVestingAccounts = async(sender:string, args: RegisterVestingAccountsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  callback = async(sender:string, args: CallbackArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { register_vesting_accounts: args }, fee || "auto", memo, funds);
-  }
-  proposeNewOwner = async(sender:string, args: ProposeNewOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { propose_new_owner: args }, fee || "auto", memo, funds);
-  }
-  dropOwnershipProposal = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { drop_ownership_proposal: {} }, fee || "auto", memo, funds);
-  }
-  claimOwnership = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { claim_ownership: {} }, fee || "auto", memo, funds);
-  }
-  setVestingToken = async(sender:string, args: SetVestingTokenArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { set_vesting_token: args }, fee || "auto", memo, funds);
-  }
-  managedExtension = async(sender:string, args: ManagedExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { managed_extension: args }, fee || "auto", memo, funds);
-  }
-  withManagersExtension = async(sender:string, args: WithManagersExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { with_managers_extension: args }, fee || "auto", memo, funds);
-  }
-  historicalExtension = async(sender:string, args: HistoricalExtensionArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { historical_extension: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, { callback: args }, fee || "auto", memo, funds);
   }
 }

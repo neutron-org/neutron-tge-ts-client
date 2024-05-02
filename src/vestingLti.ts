@@ -133,7 +133,7 @@ export type ExecuteMsgWithManagers =
       };
     };
 
-export interface VestingInvestorsSchema {
+export interface VestingLtiSchema {
   responses:
     | Uint128
     | Config

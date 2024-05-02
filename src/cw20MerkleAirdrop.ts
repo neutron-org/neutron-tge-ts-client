@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate"; 
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -25,8 +25,9 @@ export interface Cw20MerkleAirdropSchema {
     | IsPausedResponse
     | MerkleRootResponse
     | TotalClaimedResponse;
-  query: IsClaimedArgs | AccountMapArgs;
-  execute: ClaimArgs;
+  query: IsClaimedArgs | AccountMapArgs | AllAccountMapsArgs;
+  execute: ClaimArgs | UpdateReserveArgs;
+  instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
 export interface AccountMapResponse {
@@ -74,12 +75,46 @@ export interface IsClaimedArgs {
 export interface AccountMapArgs {
   external_address: string;
 }
+export interface AllAccountMapsArgs {
+  limit?: number | null;
+  start_after?: string | null;
+}
 export interface ClaimArgs {
   amount: Uint128;
   /**
    * Proof is hex-encoded merkle proof.
    */
   proof: string[];
+  [k: string]: unknown;
+}
+export interface UpdateReserveArgs {
+  address: string;
+  [k: string]: unknown;
+}
+export interface InstantiateMsg {
+  /**
+   * A point in time from which it is possible to claim airdrops
+   */
+  airdrop_start: number;
+  credits_address: string;
+  /**
+   * hrp is the bech32 parameter required for building external network address from signature message during claim action. example "cosmos", "terra", "juno"
+   */
+  hrp?: string | null;
+  /**
+   * MerkleRoot is hex-encoded merkle root.
+   */
+  merkle_root: string;
+  reserve_address: string;
+  total_amount?: Uint128 | null;
+  /**
+   * Total duration of vesting. At `vesting_start.seconds() + vesting_duration_seconds` point of time it is no longer possible to claim airdrops. At the very same point of time, it is possible to withdraw all remaining cNTRNs, exchange them for NTRNs and send to reserve, using `[ExecuteMsg::WithdrawAll]` message
+   */
+  vesting_duration_seconds: number;
+  /**
+   * A point in time from which a vesting is configured for cNTRNs. At this point, it is still possible for users to claim their airdrops.
+   */
+  vesting_start: number;
   [k: string]: unknown;
 }
 
@@ -100,6 +135,35 @@ export class Client {
   mustBeSigningClient() {
     return new Error("This client is not a SigningCosmWasmClient");
   }
+  static async instantiate(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
+  static async instantiate2(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    salt: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+  ): Promise<InstantiateResult> {
+    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }),
+    });
+    return res;
+  }
   queryConfig = async(): Promise<ConfigResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
@@ -115,8 +179,8 @@ export class Client {
   queryAccountMap = async(args: AccountMapArgs): Promise<AccountMapResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { account_map: args });
   }
-  queryAllAccountMaps = async(): Promise<AccountMapResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { all_account_maps: {} });
+  queryAllAccountMaps = async(args: AllAccountMapsArgs): Promise<AccountMapResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { all_account_maps: args });
   }
   queryIsPaused = async(): Promise<IsPausedResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { is_paused: {} });
@@ -136,5 +200,9 @@ export class Client {
   resume = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { resume: {} }, fee || "auto", memo, funds);
+  }
+  updateReserve = async(sender:string, args: UpdateReserveArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, { update_reserve: args }, fee || "auto", memo, funds);
   }
 }

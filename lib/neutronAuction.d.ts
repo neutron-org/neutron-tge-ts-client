@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -26,10 +26,17 @@ export type Addr = string;
  */
 export type Uint128 = string;
 export type PoolType = "USDC" | "ATOM";
+export type CallbackArgs = {
+    finalize_pool_initialization: {
+        prev_lp_balance: PoolBalance;
+        [k: string]: unknown;
+    };
+};
 export interface NeutronAuctionSchema {
     responses: Config | State | UserInfoResponse;
     query: UserInfoArgs;
-    execute: UpdateConfigArgs | SetTokenInfoArgs | WithdrawArgs | LockLpArgs | WithdrawLpArgs;
+    execute: UpdateConfigArgs | SetTokenInfoArgs | WithdrawArgs | LockLpArgs | WithdrawLpArgs | CallbackArgs;
+    instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
 export interface Config {
@@ -235,11 +242,36 @@ export interface WithdrawLpArgs {
     duration: number;
     [k: string]: unknown;
 }
+export interface PoolBalance {
+    atom: Uint128;
+    usdc: Uint128;
+    [k: string]: unknown;
+}
+export interface InstantiateMsg {
+    deposit_window: number;
+    init_timestamp: number;
+    lockdrop_contract_address?: string | null;
+    lp_tokens_lock_window: number;
+    max_exchange_rate_age: number;
+    min_ntrn_amount: Uint128;
+    owner?: string | null;
+    price_feed_contract: string;
+    reserve_contract_address: string;
+    token_info_manager: string;
+    vesting_atom_contract_address: string;
+    vesting_lp_duration: number;
+    vesting_migration_pack_size: number;
+    vesting_usdc_contract_address: string;
+    withdrawal_window: number;
+    [k: string]: unknown;
+}
 export declare class Client {
     private readonly client;
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     queryConfig: () => Promise<Config>;
     queryState: () => Promise<State>;
     queryUserInfo: (args: UserInfoArgs) => Promise<UserInfoResponse>;
@@ -252,5 +284,5 @@ export declare class Client {
     lockLp: (sender: string, args: LockLpArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     withdrawLp: (sender: string, args: WithdrawLpArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     migrateToVesting: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    callback: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    callback: (sender: string, args: CallbackArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }

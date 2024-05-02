@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -23,9 +23,7 @@ export type Expiration = {
 } | {
     at_time: Timestamp;
 } | {
-    never: {
-        [k: string]: unknown;
-    };
+    never: {};
 };
 /**
  * A point in time in nanosecond precision.
@@ -64,8 +62,9 @@ export type Addr = string;
 export type Nullable_MinterResponse = MinterResponse | null;
 export interface CreditsSchema {
     responses: AllAccountsResponse | AllAllowancesResponse | Allocation | AllowanceResponse | BalanceResponse | BalanceResponse1 | Config | Nullable_MinterResponse | TokenInfoResponse | TotalSupplyResponse | VestedAmountResponse | WithdrawableAmountResponse;
-    query: WithdrawableAmountArgs | VestedAmountArgs | AllocationArgs | BalanceArgs | BalanceAtHeightArgs | AllowanceArgs | AllAllowancesArgs;
+    query: WithdrawableAmountArgs | VestedAmountArgs | AllocationArgs | BalanceArgs | TotalSupplyAtHeightArgs | BalanceAtHeightArgs | AllowanceArgs | AllAllowancesArgs | AllAccountsArgs;
     execute: UpdateConfigArgs | AddVestingArgs | TransferArgs | BurnArgs | BurnFromArgs;
+    instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
 export interface AllAccountsResponse {
@@ -80,7 +79,6 @@ export interface AllowanceInfo {
     allowance: Uint128;
     expires: Expiration;
     spender: string;
-    [k: string]: unknown;
 }
 export interface Allocation {
     /**
@@ -119,11 +117,9 @@ export interface AllowanceResponse {
 }
 export interface BalanceResponse {
     balance: Uint128;
-    [k: string]: unknown;
 }
 export interface BalanceResponse1 {
     balance: Uint128;
-    [k: string]: unknown;
 }
 export interface Config {
     /**
@@ -150,14 +146,12 @@ export interface MinterResponse {
      */
     cap?: Uint128 | null;
     minter: string;
-    [k: string]: unknown;
 }
 export interface TokenInfoResponse {
     decimals: number;
     name: string;
     symbol: string;
     total_supply: Uint128;
-    [k: string]: unknown;
 }
 export interface TotalSupplyResponse {
     total_supply: Uint128;
@@ -189,6 +183,9 @@ export interface AllocationArgs {
 export interface BalanceArgs {
     address: string;
 }
+export interface TotalSupplyAtHeightArgs {
+    height?: number | null;
+}
 export interface BalanceAtHeightArgs {
     address: string;
     height?: number | null;
@@ -200,6 +197,10 @@ export interface AllowanceArgs {
 export interface AllAllowancesArgs {
     limit?: number | null;
     owner: string;
+    start_after?: string | null;
+}
+export interface AllAccountsArgs {
+    limit?: number | null;
     start_after?: string | null;
 }
 export interface UpdateConfigArgs {
@@ -242,22 +243,28 @@ export interface BurnFromArgs {
     owner: string;
     [k: string]: unknown;
 }
+export interface InstantiateMsg {
+    dao_address: string;
+    [k: string]: unknown;
+}
 export declare class Client {
     private readonly client;
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     queryWithdrawableAmount: (args: WithdrawableAmountArgs) => Promise<WithdrawableAmountResponse>;
     queryVestedAmount: (args: VestedAmountArgs) => Promise<VestedAmountResponse>;
     queryAllocation: (args: AllocationArgs) => Promise<Allocation>;
     queryBalance: (args: BalanceArgs) => Promise<BalanceResponse>;
-    queryTotalSupplyAtHeight: () => Promise<TotalSupplyResponse>;
+    queryTotalSupplyAtHeight: (args: TotalSupplyAtHeightArgs) => Promise<TotalSupplyResponse>;
     queryBalanceAtHeight: (args: BalanceAtHeightArgs) => Promise<BalanceResponse>;
     queryTokenInfo: () => Promise<TokenInfoResponse>;
     queryMinter: () => Promise<Nullable_MinterResponse>;
     queryAllowance: (args: AllowanceArgs) => Promise<AllowanceResponse>;
     queryAllAllowances: (args: AllAllowancesArgs) => Promise<AllAllowancesResponse>;
-    queryAllAccounts: () => Promise<AllAccountsResponse>;
+    queryAllAccounts: (args: AllAccountsArgs) => Promise<AllAccountsResponse>;
     queryConfig: () => Promise<Config>;
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     addVesting: (sender: string, args: AddVestingArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
