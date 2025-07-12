@@ -6,8 +6,8 @@
   "author": "Sergey Ratiashvili <serg.s.r@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "@cosmjs/amino": "^0.32.2",
-    "@cosmjs/cosmwasm-stargate": "^0.32.2"
+    "@cosmjs/amino": "^0.34.0",
+    "@cosmjs/cosmwasm-stargate": "^0.34.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
